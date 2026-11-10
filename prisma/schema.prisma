@@ -1,0 +1,137 @@
+generator client {
+  provider   = "prisma-client-js"
+  // Sem motores nativos (Rust): consultas compiladas em WASM e ligação via driver "pg".
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  /// Gere utilizadores, o certificado da AT e vê a auditoria, além de tudo o que o USER faz.
+  ADMIN
+  /// Gere empresas e descarrega faturas.
+  USER
+}
+
+enum InvoiceDirection {
+  /// Faturas em que o NIF da empresa é emitente.
+  ISSUED
+  /// Faturas em que o NIF da empresa é adquirente.
+  RECEIVED
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         Role      @default(USER)
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions  Session[]
+  auditLogs AuditLog[]
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ip         String?
+  userAgent  String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// Ligação ao webservice da AT, comum a todas as empresas: o certificado SSL é o do produtor de software
+/// (quem aderiu ao serviço), e cada empresa autentica-se com o seu próprio subutilizador. Registo único (id "default").
+model AtSettings {
+  id               String    @id @default("default")
+  /// "prod" | "test" ou um URL completo (simulador).
+  endpoint         String    @default("prod")
+  /// "pem" (certificado + chave privada) ou "pfx" (PKCS#12 em base64).
+  tlsFormat        String?
+  tlsCertEnc       String?
+  tlsKeyEnc        String?
+  tlsPassphraseEnc String?
+  /// Fim da validade do certificado SSL (a AT assina por 12 meses). Só conhecido para certificados PEM.
+  tlsCertExpiresAt DateTime?
+  /// Chave pública do Sistema de Autenticação do Portal das Finanças (PEM).
+  authPublicKey    String?
+  /// Dia (AAAA-MM-DD, hora de Lisboa) da última descarga automática.
+  lastAutoSyncDay  String?
+  updatedAt        DateTime  @updatedAt
+}
+
+/// Empresa (sujeito passivo) cujas faturas são descarregadas do e-Fatura.
+model Company {
+  id            String    @id @default(cuid())
+  name          String
+  nif           String    @unique
+  email         String?
+  notes         String?
+  active        Boolean   @default(true)
+  /// Número do subutilizador do Portal das Finanças (a parte depois da barra em 555555555/1).
+  subUser       String
+  passwordEnc   String
+  /// Incluir na descarga automática diária.
+  autoSync      Boolean   @default(true)
+  lastSyncAt    DateTime?
+  /// Mensagem do último erro de descarga (limpa quando uma descarga corre bem).
+  lastSyncError String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  invoices Invoice[]
+}
+
+/// Fatura registada no e-Fatura, obtida pelo webservice de consulta.
+model Invoice {
+  id              String           @id @default(cuid())
+  companyId       String
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  direction       InvoiceDirection
+  issuerNif       String
+  customerNif     String?
+  customerCountry String?
+  invoiceNo       String
+  atcud           String?
+  invoiceDate     DateTime         @db.Date
+  invoiceType     String
+  status          String?
+  selfBilling     Boolean          @default(false)
+  cashVat         Boolean          @default(false)
+  netTotal        Decimal          @db.Decimal(14, 2)
+  taxPayable      Decimal          @db.Decimal(14, 2)
+  grossTotal      Decimal          @db.Decimal(14, 2)
+  /// Linhas (resumo por taxa) e restantes campos devolvidos pela AT.
+  details         Json
+  fetchedAt       DateTime         @default(now())
+
+  @@unique([companyId, direction, issuerNif, invoiceNo])
+  @@index([companyId, direction, invoiceDate])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  targetType String?
+  targetId   String?
+  details    Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([targetType, targetId])
+}

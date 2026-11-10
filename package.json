@@ -1,0 +1,56 @@
+{
+  "name": "efatura",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Descarga multiempresa das faturas do e-Fatura pelo webservice de consulta da AT",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false server.ts",
+    "build": "prisma generate && next build && npm run build:server",
+    "build:server": "esbuild server.ts --bundle --platform=node --target=node22 --packages=external --outfile=dist/server.js --tsconfig=tsconfig.json && esbuild prisma/seed.ts --bundle --platform=node --target=node22 --packages=external --outfile=dist/seed.js && esbuild scripts/migrate.ts --bundle --platform=node --target=node22 --packages=external --outfile=dist/migrate.js",
+    "start": "node dist/server.js",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "mock": "tsx scripts/mock-at.ts",
+    "demo:seed": "tsx scripts/seed-demo.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^6.19.3",
+    "@prisma/client": "^6.19.3",
+    "bcryptjs": "^3.0.3",
+    "fast-xml-parser": "^5.12.0",
+    "next": "^15.5.29",
+    "pg": "^8.23.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "undici": "^7.30.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.4",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.28.2",
+    "prisma": "^6.19.3",
+    "tailwindcss": "^4.3.4",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "browserslist": [
+    "chrome >= 109",
+    "edge >= 109",
+    "firefox >= 115",
+    "safari >= 16"
+  ]
+}
