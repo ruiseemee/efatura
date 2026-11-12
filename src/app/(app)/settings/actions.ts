@@ -1,5 +1,6 @@
 "use server";
 
+import { X509Certificate } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
@@ -28,9 +29,20 @@ async function fileBuffer(fd: FormData, name: string): Promise<Buffer | null> {
 
 const isPem = (b: Buffer) => b.includes("-----BEGIN");
 
+function derCertificateToPem(der: Buffer): string | null {
+  try {
+    return new X509Certificate(der).toString();
+  } catch {
+    return null;
+  }
+}
+
 /** Campos TLS a guardar a partir dos ficheiros enviados (certificado PEM + chave, ou PKCS#12). */
-function tlsData(cert: Buffer, key: Buffer | null, passphrase: string) {
+function tlsData(rawCert: Buffer, key: Buffer | null, passphrase: string) {
   const passEnc = passphrase ? encrypt(passphrase) : null;
+  // Um certificado X.509 em binário (DER, p. ex. .cer/.crt) é convertido para PEM; outro binário é tratado como .pfx.
+  const der = !isPem(rawCert) ? derCertificateToPem(rawCert) : null;
+  const cert = der ? Buffer.from(der) : rawCert;
   if (!isPem(cert)) {
     assertTlsIdentity({ pfx: cert, passphrase: passphrase || undefined });
     return { tlsFormat: "pfx", tlsCertEnc: encrypt(cert.toString("base64")), tlsKeyEnc: null, tlsPassphraseEnc: passEnc, tlsCertExpiresAt: null };
